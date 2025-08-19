@@ -118,7 +118,8 @@ func GetSyncParams(_type string, id int, subtitleInfo subtitle_info) Sync_params
 	return params
 }
 
-func Sync(cfg config.Config, params Sync_params) bool {
+// Updated Sync function with detailed error reporting
+func Sync(cfg config.Config, params Sync_params) (bool, string) {
 	c := client.GetClient(cfg.ApiToken)
 	u, _ := url.JoinPath(cfg.ApiUrl, "subtitles")
 
@@ -133,14 +134,56 @@ func Sync(cfg config.Config, params Sync_params) bool {
 
 	resp, err := c.Patch(_url.String())
 	if err != nil {
-		return false
+		return false, fmt.Sprintf("Connection error: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 204 {
-		return false
+	body, _ := io.ReadAll(resp.Body)
+
+	// Different status codes mean different things
+	switch resp.StatusCode {
+	case 204:
+		// Success
+		return true, "Success"
+	case 304:
+		// Not modified - already synced
+		return false, "Already synced (no changes needed)"
+	case 400:
+		// Bad request
+		if len(body) > 0 {
+			return false, fmt.Sprintf("Bad request: %s", string(body))
+		}
+		return false, "Bad request (check subtitle file)"
+	case 404:
+		// Not found
+		return false, "Subtitle file not found"
+	case 409:
+		// Conflict - usually means already in sync
+		return false, "Already in perfect sync"
+	case 500:
+		// Server error
+		if len(body) > 0 {
+			// Check for specific error messages
+			bodyStr := string(body)
+			if contains(bodyStr, "already synchronized") || contains(bodyStr, "already in sync") {
+				return false, "Already synchronized"
+			}
+			if contains(bodyStr, "subsync") || contains(bodyStr, "ffmpeg") {
+				return false, "Sync tool not available (check subsync/ffmpeg)"
+			}
+			return false, fmt.Sprintf("Server error: %s", bodyStr)
+		}
+		return false, "Server error during sync"
+	default:
+		if len(body) > 0 {
+			return false, fmt.Sprintf("Status %d: %s", resp.StatusCode, string(body))
+		}
+		return false, fmt.Sprintf("Unknown status: %d", resp.StatusCode)
 	}
-	return true
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && (s[0:len(substr)] == substr || contains(s[1:], substr)))
 }
 
 func HealthCheck(cfg config.Config) {

@@ -37,6 +37,9 @@ The script by default will try to not use the golden section search method and w
 		if cmd.Flags().Changed("use-cache") {
 			cfg.Cache.Enabled = use_cache
 		}
+		if cmd.Flags().Changed("verbose") {
+			verbose = true
+		}
 
 		if cfg.Cache.Enabled {
 			Load_cache(cfg)
@@ -59,6 +62,7 @@ func init() {
 	syncCmd.AddCommand(showsCmd)
 	showsCmd.Flags().IntSliceVar(&sonarrid, "sonarr-id", []int{}, "Specify a list of sonarr Ids to sync. Use --list to view your shows with respective sonarr id.")
 	showsCmd.Flags().IntVar(&showsContinueFrom, "continue-from", -1, "Continue with the given Sonarr episode ID.")
+	showsCmd.Flags().BoolVar(&verbose, "verbose", false, "Show detailed error messages")
 }
 
 func sync_shows(cfg config.Config, c chan int) {
@@ -77,6 +81,7 @@ func sync_shows(cfg config.Config, c chan int) {
 	successCount := 0
 	skipCount := 0
 	failCount := 0
+	alreadySyncedCount := 0
 
 shows:
 	for i, show := range shows.Data {
@@ -143,23 +148,43 @@ shows:
 				}
 
 				fmt.Printf("  └─ SYNCING [%s - %s]: ", episode.Title, subtitle.Code2)
-				ok := bazarr.Sync(cfg, params)
+				ok, message := bazarr.Sync(cfg, params)
 
 				if ok {
 					fmt.Printf("✓ Success\n")
 					Write_shows_cache(cfg, subtitle.Path)
 					successCount++
 				} else {
-					fmt.Printf("✗ Failed, retrying...")
-					time.Sleep(2 * time.Second)
-					ok := bazarr.Sync(cfg, params)
-					if ok {
-						fmt.Printf(" ✓ Success\n")
-						Write_shows_cache(cfg, subtitle.Path)
-						successCount++
+					// Check if it's already synced
+					if strings.Contains(strings.ToLower(message), "already") ||
+						strings.Contains(strings.ToLower(message), "sync") ||
+						strings.Contains(message, "304") ||
+						strings.Contains(message, "409") {
+						fmt.Printf("✓ Already in sync\n")
+						Write_shows_cache(cfg, subtitle.Path) // Cache it so we don't try again
+						alreadySyncedCount++
 					} else {
-						fmt.Printf(" ✗ Failed\n")
-						failCount++
+						// Retry once for real failures
+						fmt.Printf("✗ Failed (%s), retrying...", message)
+						time.Sleep(2 * time.Second)
+						ok, message := bazarr.Sync(cfg, params)
+						if ok {
+							fmt.Printf(" ✓ Success\n")
+							Write_shows_cache(cfg, subtitle.Path)
+							successCount++
+						} else if strings.Contains(strings.ToLower(message), "already") ||
+							strings.Contains(strings.ToLower(message), "sync") {
+							fmt.Printf(" ✓ Already in sync\n")
+							Write_shows_cache(cfg, subtitle.Path)
+							alreadySyncedCount++
+						} else {
+							if verbose {
+								fmt.Printf(" ✗ Failed: %s\n", message)
+							} else {
+								fmt.Printf(" ✗ Failed\n")
+							}
+							failCount++
+						}
 					}
 				}
 
@@ -170,8 +195,16 @@ shows:
 	}
 
 	fmt.Println(strings.Repeat("-", 60))
-	fmt.Printf("Sync completed: %d successful, %d skipped, %d failed\n",
-		successCount, skipCount, failCount)
+	fmt.Printf("Sync completed:\n")
+	fmt.Printf("  ✅ %d newly synced\n", successCount)
+	fmt.Printf("  ✓  %d already in sync\n", alreadySyncedCount)
+	fmt.Printf("  ⏭️  %d skipped (cached/embedded)\n", skipCount)
+	fmt.Printf("  ❌ %d failed\n", failCount)
+
+	if failCount > 0 && !verbose {
+		fmt.Println("\n💡 Tip: Run with --verbose to see detailed error messages")
+	}
+
 	close(c)
 }
 
