@@ -1,114 +1,291 @@
-![bazarr-sync](https://github.com/ajmandourah/bazarr-sync/assets/27051374/6c4acde4-bb9b-4172-8c67-c985c7994b28)
+```markdown
+# bazarr-sync
 
-![image](https://github.com/ajmandourah/bazarr-sync/assets/27051374/545803da-a061-4092-9f35-6bbabac598a7)
+<div align="center">
 
-### Bulk sync your subtitles to your media.
+![bazarr-sync](https://github.com/regix1/bazarr-sync/assets/27051374/6c4acde4-bb9b-4172-8c67-c985c7994b28)
 
-Bazarr let you download subs for your titles automatically.
-But if for some reason you needed to sync old subtitles, wither you need to do it because you have not synced them before or you have edited them elsewhere, you will be forced to do it one by one as there is no option to bulk sync them except a per series option which won't help if you would like to sync movies or if you have several shows.
-This cli tool help you achieve that by utilizing bazarr's api.
+### 🎯 Bulk sync subtitles in Bazarr with ease
 
-## Installation 
+[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://ghcr.io/regix1/bazarr-sync)
+[![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)](https://go.dev/)
+[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
 
-### Go
-- Install go in your system. this can be done through here. https://go.dev/doc/install
-- After installation in a terminal install the module
-```
-go install github.com/ajmandourah/bazarr-sync/cmd/bazarr-sync@latest
+</div>
 
-```
-make sure your go path is included in your path. you should be able to use the command directly with `bazarr-sync` or `bazarr-sync.exe` in windows.
+---
 
-### Docker
-pull the image 
-```
-sudo docker pull ghcr.io/ajmandourah/bazarr-sync:latest
+## 📖 Why bazarr-sync?
+
+Bazarr downloads subtitles automatically, but syncing them requires clicking through each file individually. This tool lets you sync everything at once - movies, shows, or both - with smart caching and scheduling.
 
 ```
-create or copy the `config.yaml` file from the example folder. edit it to your settings. for docker you can use the bazarr container name if you have bazarr in a bridged network (not the default docker network). change the network name in the command.
-Run the command in the same folder where the `config.yaml` is located. change the command to your desired functionfor example `bazarr-sync sync shows`
-```
-sudo docker run -it --rm \
--v ${PWD}/config.yaml:/usr/src/app/config.yaml \
---network <NETWORK_NAME> \
-ghcr.io/ajmandourah/bazarr-sync:latest \
-bazarr-sync sync movies
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│                 │      │                 │      │                 │
+│     Bazarr      │ API  │  bazarr-sync    │      │   Subtitles     │
+│     Server      ├─────►│     Engine      ├─────►│    Synced!      │
+│                 │      │                 │      │                 │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
 ```
 
-## Configuration
-use the provided config.yaml file as a template. fill in the required fields.
-either direct the flag --config to your config file or place it in the working directiory where you bazarr-sync is located.
+---
+
+## 🚀 Quick Start
+
+### Docker (Recommended)
+
+```bash
+# Pull the image
+docker pull ghcr.io/regix1/bazarr-sync:latest
+
+# Create config file
+nano config.yaml
+
+# Run sync with cache
+docker run -it --rm \
+  -v ${PWD}/config.yaml:/config/config.yaml \
+  -v ${PWD}/cache:/config/cache \
+  ghcr.io/regix1/bazarr-sync:latest \
+  sync movies --use-cache
+```
+
+### Docker Compose
+
 ```yaml
-#config file example, please don't use quotes
-###########################
-#
-#Address: the address of your bazarr instance. this can be either an ip address or a url (if you reverse proxy bazarr), 
-#this can also be bazarr's container name if you use docker, make sure bazarr-sync instance is in the same network as bazarr and the network not the default
-#docker network as name resolution won't happen there.
-Address: <bazarr_address>
-#
-#Port: bazarrs port. by default bazarr uses 6767. in case of reverse proxy, you can use 443 or 80 as per your configuration 
-Port: <port>
-#
-#protocol: this can be http or https
-Protocol: https
-#
-#ApiToken: you can get this from bazarr setting>general . no quotes needed.
-ApiToken: <Bazarr_api_token>
-```
-## Usage:
-
-```
-Make sure to create a config.yaml file including your configuration in it.
-Use the provided config file as a template.
-
-Usage:
-  bazarr-sync [command]
-
-Examples:
-bazarr-sync --config config.yaml sync movies --no-framerate-fix
-
-Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  help        Help about any command
-  sync        Sync subtitles to the audio track of the media
-
-Flags:
-      --config string      config file (default is ./config.yaml)
-      --golden-section     Use Golden-Section Search
-  -h, --help               help for bazarr-sync
-      --no-framerate-fix   Don't try to fix framerate
-```
-Sync all movies subtitles
-```
-bazarr-sync --config config.yaml sync movies
-```
-Sync all tv shows subtitles
-```
-bazarr-sync --config config.yaml sync shows
+services:
+  bazarr-sync:
+    image: ghcr.io/regix1/bazarr-sync:latest
+    container_name: bazarr-sync
+    volumes:
+      - ./config.yaml:/config/config.yaml
+      - ./cache:/config/cache
+    command: --schedule  # Run on schedule
+    restart: unless-stopped
 ```
 
-## Syncing specefic movie/show subtitle
-The functionality to enable syncing specefic movies/shows are added. to do so follow these steps:
-- use the `--list` flag to view a list of your Shows/Movies with their respective sonarr/radarr ids. the output will shows as follows
-```
-Title                                                                                               | SonarrSeriesId
---------------------------------------------------------------------------------------------------------------------
-3 Body Problem                                                                                      | 1304
-The Apothecary Diaries                                                                              | 1043
-As a Reincarnated Aristocrat, I'll Use My Appraisal Skill To Rise in the World                      | 953
-Avatar: The Last Airbender (2024)                                                                   | 1341
-The Banished Former Hero Lives as He Pleases                                                        | 961
-```
-- note the ids of your desired shows/movies to be synced
-- use the usual sync command and add the flag `--radarr-id` or `--sonarr-id`
-- PROFIT
+---
 
-Example:
-```
-bazarr-sync --config config.yaml sync shows --sonarr-id 1302,953,961
+## ⚙️ Configuration
+
+Create a `config.yaml` file:
+
+```yaml
+# ┌─────────────────────────────────────────────────────────────┐
+# │                    BASIC CONNECTION                         │
+# └─────────────────────────────────────────────────────────────┘
+Address: localhost        # Or container name if using Docker
+Port: 6767               # Default Bazarr port
+Protocol: http           # http or https
+ApiToken: your_token     # From Bazarr Settings > General
+
+# ┌─────────────────────────────────────────────────────────────┐
+# │                    SCHEDULING (Optional)                    │
+# └─────────────────────────────────────────────────────────────┘
+Schedule:
+  Enabled: true
+  SyncMovies: true
+  SyncShows: true
+  CronExpression: "0 1 * * 0"    # Weekly on Sunday at 1 AM
+  Timezone: "America/Chicago"
+
+# ┌─────────────────────────────────────────────────────────────┐
+# │                    CACHE (Optional)                         │
+# └─────────────────────────────────────────────────────────────┘
+Cache:
+  Enabled: true
+  MoviesCache: "/config/cache/movies"
+  ShowsCache: "/config/cache/shows"
+
+# ┌─────────────────────────────────────────────────────────────┐
+# │                    SYNC OPTIONS (Optional)                  │
+# └─────────────────────────────────────────────────────────────┘
+SyncOptions:
+  GoldenSection: false      # Use Golden Section Search
+  NoFramerateFix: true     # Skip framerate correction
 ```
 
-## Syncing both movies and shows
-You can sync both movies and shows in the same time. what I recommend is using tmux and run the tool in 2 windows. this will assure that you won't loose progress.
-![image](https://github.com/ajmandourah/bazarr-sync/assets/27051374/9a514fa4-aa6d-4756-98ce-f8d68dcf4ffd)
+---
+
+## 📚 Commands
+
+### Basic Sync Operations
+
+```bash
+┌─────────────────────────────────────────────────────────────┐
+│ SYNC ALL MOVIES                                            │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync sync movies                                  │
+│                                                             │
+│ Output:                                                     │
+│ [1/155] PROCESSING: Inception (2 subtitles)                │
+│   └─ SYNCING [en]: ⠋ (animated spinner)                    │
+│   └─ SYNCING [en]: ✓ Success                              │
+│   └─ SYNCING [es]: ✓ Already in sync                      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ SYNC ALL TV SHOWS                                          │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync sync shows                                   │
+│                                                             │
+│ Output:                                                     │
+│ [1/45] PROCESSING: Breaking Bad (62 episodes)              │
+│   └─ SYNCING [S01E01 - en]: ✓ Success                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Advanced Features
+
+```bash
+┌─────────────────────────────────────────────────────────────┐
+│ LIST ALL MEDIA WITH IDs                                    │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync sync movies --list                           │
+│                                                             │
+│ Title                                          RadarrId    │
+│ ──────────────────────────────────────────────────────     │
+│ Inception                                      123         │
+│ The Matrix                                     456         │
+│ Interstellar                                   789         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ SYNC SPECIFIC ITEMS ONLY                                   │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync sync movies --radarr-id 123,456             │
+│ $ bazarr-sync sync shows --sonarr-id 789,012              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ USE SMART CACHE (Skip already synced)                      │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync sync movies --use-cache                      │
+│                                                             │
+│ Output:                                                     │
+│   └─ CACHED [en]: Already synced                          │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ CONTINUE FROM INTERRUPTION                                 │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync sync movies --continue-from 456              │
+│                                                             │
+│ # Skips all movies before ID 456 and continues            │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ CANCEL RUNNING SYNC                                        │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync cancel                                       │
+│                                                             │
+│ Output:                                                     │
+│ 🛑 Sent cancel signal to sync process (PID: 1234)         │
+│ ✅ Cancel signal sent. The sync will stop gracefully.      │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ RUN ON SCHEDULE                                            │
+├─────────────────────────────────────────────────────────────┤
+│ $ bazarr-sync --schedule                                   │
+│                                                             │
+│ Output:                                                     │
+│ INFO  Scheduler started. Next sync: 2025-01-21 01:00 CST  │
+│ INFO  Schedule: 0 1 * * 0 (Timezone: America/Chicago)     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Command Options
+
+```bash
+┌─────────────────────────────────────────────────────────────┐
+│ GLOBAL FLAGS                                               │
+├─────────────────────────────────────────────────────────────┤
+│ --config <file>      │ Config file path (default: ./config.yaml)
+│ --schedule           │ Run on schedule defined in config
+│ --run-initial        │ Run sync immediately when scheduler starts
+│ --help              │ Show help information
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ SYNC FLAGS                                                 │
+├─────────────────────────────────────────────────────────────┤
+│ --list              │ List all media with IDs
+│ --use-cache         │ Skip already synced subtitles
+│ --golden-section    │ Use Golden Section Search algorithm
+│ --no-framerate-fix  │ Skip framerate correction
+│ --verbose           │ Show detailed error messages
+│ --continue-from <id>│ Resume from specific movie/episode ID
+│ --radarr-id <ids>   │ Sync specific movies (comma-separated)
+│ --sonarr-id <ids>   │ Sync specific shows (comma-separated)
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📊 Statistics
+
+After each sync run, you'll see a summary:
+
+```
+────────────────────────────────────────────────────────────
+Sync completed:
+  ✅ 42 newly synced
+  ✓  108 already in sync  
+  ⏭️  23 skipped (cached/embedded)
+  ❌ 5 failed
+
+💡 Tip: Run with --verbose to see detailed error messages
+```
+
+---
+
+## 🎯 Features
+
+| Feature | Description |
+|---------|-------------|
+| **🔄 Bulk Sync** | Process entire library at once |
+| **💾 Smart Cache** | Skip already synced files automatically |
+| **⏰ Scheduler** | Set up automatic weekly/daily syncs |
+| **⏸️ Resume Support** | Continue after interruption |
+| **🎨 Progress Tracking** | Visual feedback with animated spinners |
+| **🎯 Selective Sync** | Choose specific movies/shows |
+| **🛑 Cancel Command** | Gracefully stop running operations |
+| **📝 Verbose Mode** | Detailed error messages for debugging |
+
+---
+
+## 📋 Requirements
+
+- ✅ Bazarr instance with API access enabled
+- ✅ Subsync installed in Bazarr (Settings > Subtitles > Synchronization)
+- ✅ Docker or Go runtime
+
+---
+
+## 🐛 Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| **401 Unauthorized** | Check your API token in config.yaml |
+| **Connection refused** | Verify Bazarr address and port |
+| **Sync failures** | Ensure subsync is installed in Bazarr |
+| **Already synced** | Use `--use-cache` to skip them |
+
+---
+
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE) file for details
+
+---
+
+<div align="center">
+
+**Made with ❤️ for the Bazarr community**
+
+[Report Bug](https://github.com/regix1/bazarr-sync/issues) · [Request Feature](https://github.com/regix1/bazarr-sync/issues)
+
+</div>
+```
+
+This README uses line art boxes and visual separators to make it more readable and organized. The command examples show actual output to help users understand what to expect. The layout is clean, professional, and easy to navigate.
