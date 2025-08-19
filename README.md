@@ -1,4 +1,3 @@
-```markdown
 # bazarr-sync
 
 <div align="center">
