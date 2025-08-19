@@ -23,13 +23,18 @@ var shows_cache = make(map[string]bool)
 
 var rootCmd = &cobra.Command{
 	Use:     "bazarr-sync",
-	Example: "bazarr-sync --config config.yaml sync movies --no-framerate-fix",
-	Short:   "Manually bulk-sync subtitles downloaded via bazarr",
+	Aliases: []string{"bs"},
+	Short:   "Bulk-sync subtitles downloaded via Bazarr",
 	Long: `Bulk-sync subtitles downloaded via Bazarr.
+	
 Bazarr lets you download subs for your titles automatically. 
-But if for some reason you needed to sync old subtitles, whether you need to do it because you have not synced them before or you have edited them elsewhere, you will be forced to do it one by one as there is no option to bulk sync them.
-This cli tool helps you achieve that by utilizing bazarr's api. 
-Make sure to create a config.yaml file including your configuration in it. Use the provided config file as a template.`,
+But if for some reason you needed to sync old subtitles, you will be forced 
+to do it one by one as there is no option to bulk sync them.
+This cli tool helps you achieve that by utilizing bazarr's api.`,
+	Example: `  bazarr-sync movies
+  bazarr-sync shows
+  bazarr-sync cancel
+  bazarr-sync --schedule`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetConfig()
 
@@ -53,8 +58,8 @@ Make sure to create a config.yaml file including your configuration in it. Use t
 		if schedule || cfg.Schedule.Enabled {
 			RunScheduler(cfg)
 		} else {
-			// Run once and exit
-			runSyncJobs(cfg)
+			// Show help if no subcommand
+			cmd.Help()
 		}
 	},
 }
@@ -74,7 +79,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&config.CfgFile, "config", "", "config file (default is ./config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&gss, "golden-section", false, "Use Golden-Section Search")
 	rootCmd.PersistentFlags().BoolVar(&no_framerate_fix, "no-framerate-fix", false, "Don't try to fix framerate")
-	rootCmd.PersistentFlags().BoolVar(&to_list, "list", false, "list your media with their respective Radarr/Sonarr id.")
+	rootCmd.PersistentFlags().BoolVar(&to_list, "list", false, "List your media with their respective Radarr/Sonarr id")
 	rootCmd.PersistentFlags().BoolVar(&use_cache, "use-cache", false, "Use cache to skip already synced subtitles")
 	rootCmd.PersistentFlags().BoolVar(&schedule, "schedule", false, "Run on schedule defined in config file")
 	rootCmd.PersistentFlags().BoolVar(&runInitial, "run-initial", false, "Run initial sync when starting scheduler")
@@ -174,7 +179,7 @@ func runWithSignalHandler(syncFunc func(chan int)) {
 }
 
 func showContinueMessage(lastSubtitleId int) {
-	fmt.Println("Stopping current sync. To continue from this point the next time, run")
+	fmt.Println("\nStopping current sync. To continue from this point the next time, run:")
 	commandName := os.Args[0]
 	var args []string
 	for i := 1; i < len(os.Args); i++ {

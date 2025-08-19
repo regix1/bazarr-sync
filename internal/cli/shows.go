@@ -16,11 +16,11 @@ var showsContinueFrom int
 
 var showsCmd = &cobra.Command{
 	Use:     "shows",
-	Short:   "Sync subtitles to the audio track of the show's episodes",
-	Example: "bazarr-sync --config config.yaml sync shows --no-framerate-fix",
-	Long: `By default, Bazarr will try to sync the sub to the audio track:0 of the media. 
-This can fail due to many reasons mainly due to failure of bazarr to extract audio info. This is unfortunately out of my hands.
-The script by default will try to not use the golden section search method and will try to fix framerate issues. This can be changed using the flags.`,
+	Aliases: []string{"show", "tv", "series"},
+	Short:   "Sync subtitles to the audio track of TV shows",
+	Example: `  bazarr-sync shows
+  bazarr-sync shows --list
+  bazarr-sync shows --sonarr-id 123,456`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetConfig()
 
@@ -54,8 +54,8 @@ The script by default will try to not use the golden section search method and w
 
 func init() {
 	syncCmd.AddCommand(showsCmd)
-	showsCmd.Flags().IntSliceVar(&sonarrid, "sonarr-id", []int{}, "Specify a list of sonarr Ids to sync. Use --list to view your shows with respective sonarr id.")
-	showsCmd.Flags().IntVar(&showsContinueFrom, "continue-from", -1, "Continue with the given Sonarr episode ID.")
+	showsCmd.Flags().IntSliceVar(&sonarrid, "sonarr-id", []int{}, "Sync specific shows by Sonarr ID")
+	showsCmd.Flags().IntVar(&showsContinueFrom, "continue-from", -1, "Continue from a specific Sonarr episode ID")
 }
 
 func sync_shows(cfg config.Config, c chan int) {

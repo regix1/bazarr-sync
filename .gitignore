@@ -1,3 +1,42 @@
-build/
-cmd/bazarr-sync/config.yaml
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bazarr-sync
 
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace
+go.work
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Cache files
+movies-cache
+shows-cache
+*-cache
+
+# Config files (except example)
+config.yaml
+!example/config.yaml
+
+# Build directory
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db

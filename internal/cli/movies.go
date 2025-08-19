@@ -16,11 +16,11 @@ var moviesContinueFrom int
 
 var moviesCmd = &cobra.Command{
 	Use:     "movies",
-	Short:   "Sync subtitles to the audio track of the movie",
-	Example: "bazarr-sync --config config.yaml sync movies --no-framerate-fix",
-	Long: `By default, Bazarr will try to sync the sub to the audio track:0 of the media. 
-This can fail due to many reasons mainly due to failure of bazarr to extract audio info. This is unfortunately out of my hands.
-The script by default will try to not use the golden section search method and will try to fix framerate issues. This can be changed using the flags.`,
+	Aliases: []string{"movie", "m"},
+	Short:   "Sync subtitles to the audio track of movies",
+	Example: `  bazarr-sync movies
+  bazarr-sync movies --list
+  bazarr-sync movies --radarr-id 123,456`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetConfig()
 
@@ -54,8 +54,8 @@ The script by default will try to not use the golden section search method and w
 
 func init() {
 	syncCmd.AddCommand(moviesCmd)
-	moviesCmd.Flags().IntSliceVar(&radarrid, "radarr-id", []int{}, "Specify a list of radarr Ids to sync. Use --list to view your movies with respective radarr id.")
-	moviesCmd.Flags().IntVar(&moviesContinueFrom, "continue-from", -1, "Continue with the given Radarr movie ID.")
+	moviesCmd.Flags().IntSliceVar(&radarrid, "radarr-id", []int{}, "Sync specific movies by Radarr ID")
+	moviesCmd.Flags().IntVar(&moviesContinueFrom, "continue-from", -1, "Continue from a specific Radarr movie ID")
 }
 
 func sync_movies(cfg config.Config, c chan int) {

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -70,8 +72,9 @@ func RunScheduler(cfg config.Config) {
 
 func runSyncJobs(cfg config.Config) {
 	startTime := time.Now()
-	pterm.DefaultSection.Printf("Starting sync job at %s\n",
+	fmt.Printf("\n%s Starting scheduled sync job\n",
 		startTime.Format("2006-01-02 15:04:05"))
+	fmt.Println(strings.Repeat("=", 60))
 
 	// Create channels for progress tracking
 	progressChan := make(chan int, 1)
@@ -91,25 +94,26 @@ func runSyncJobs(cfg config.Config) {
 
 	// Run sync jobs based on configuration
 	if cfg.Schedule.SyncShows {
-		pterm.Info.Println("Syncing TV shows...")
+		fmt.Println("\n📺 Syncing TV shows...")
 		sync_shows(cfg, progressChan)
 	}
 
 	if cfg.Schedule.SyncMovies {
-		pterm.Info.Println("Syncing movies...")
+		fmt.Println("\n🎬 Syncing movies...")
 		sync_movies(cfg, progressChan)
 	}
 
 	close(doneChan)
 
 	duration := time.Since(startTime)
-	pterm.Success.Printf("Sync job completed in %s\n", duration.Round(time.Second))
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Printf("✅ Sync job completed in %s\n", duration.Round(time.Second))
 
 	// If scheduled, show next run time
 	if cfg.Schedule.Enabled {
 		nextRun := calculateNextRun(cfg.Schedule.CronExpression, cfg.Schedule.Timezone)
 		if !nextRun.IsZero() {
-			pterm.Info.Printf("Next sync scheduled for: %s\n",
+			fmt.Printf("⏰ Next sync scheduled for: %s\n\n",
 				nextRun.Format("2006-01-02 15:04:05 MST"))
 		}
 	}

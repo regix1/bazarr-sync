@@ -27,7 +27,7 @@ func QueryMovies(cfg config.Config) (movies_info, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		fmt.Fprintln(os.Stderr, "Connection Error: ", "Response status is not 200. Are you sure the address/port are correct?")
+		fmt.Fprintln(os.Stderr, "Connection Error: Response status is not 200. Are you sure the address/port are correct?")
 		return movies_info{}, errors.New("Error: Status code not 200")
 	}
 
@@ -56,7 +56,7 @@ func QuerySeries(cfg config.Config) (shows_info, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		fmt.Fprintln(os.Stderr, "Connection Error: ", "Response status is not 200. Are you sure the address/port are correct?")
+		fmt.Fprintln(os.Stderr, "Connection Error: Response status is not 200. Are you sure the address/port are correct?")
 		return shows_info{}, errors.New("Error: Status code not 200")
 	}
 
@@ -90,7 +90,7 @@ func QueryEpisodes(cfg config.Config, seriesId int) (episodes_info, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		fmt.Fprintln(os.Stderr, "Connection Error: ", "Response status is not 200. Are you sure the address/port are correct?")
+		fmt.Fprintln(os.Stderr, "Connection Error: Response status is not 200. Are you sure the address/port are correct?")
 		return episodes_info{}, errors.New("Error: Status code not 200")
 	}
 
@@ -106,7 +106,6 @@ func QueryEpisodes(cfg config.Config, seriesId int) (episodes_info, error) {
 		return episodes_info{}, err
 	}
 	return data, nil
-
 }
 
 func GetSyncParams(_type string, id int, subtitleInfo subtitle_info) Sync_params {
@@ -132,17 +131,20 @@ func Sync(cfg config.Config, params Sync_params) bool {
 	queryUrl.Set("action", "sync")
 	queryUrl.Set("language", params.Lang)
 	queryUrl.Set("type", params.Type)
+	queryUrl.Set("gss", params.Gss)
+	queryUrl.Set("no_fix_framerate", params.No_framerate_fix)
 	_url.RawQuery = queryUrl.Encode()
+
 	resp, err := c.Patch(_url.String())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Connection Error: ", err)
 		return false
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != 204 {
 		return false
 	}
 	return true
-
 }
 
 func HealthCheck(cfg config.Config) {
@@ -151,20 +153,21 @@ func HealthCheck(cfg config.Config) {
 	resp, err := c.Get(url)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Connection Error: ", err)
+		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		fmt.Fprintln(os.Stderr, "Connection Error: ", "Response status is not 200. Are you sure the address/port are correct?")
+		fmt.Fprintln(os.Stderr, "Connection Error: Response status is not 200. Are you sure the address/port are correct?")
 		return
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Reading Url Error: ", err)
+		return
 	}
 	var data version
 	json.Unmarshal(body, &data)
 	fmt.Println("Bazarr version: ", pterm.LightBlue(data.Data.Bazarr_version))
-	return
 }
