@@ -1,40 +1,53 @@
-/*
-Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-*/
 package cli
 
 import (
-	"github.com/ajmandourah/bazarr-sync/internal/config"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/ajmandourah/bazarr-sync/internal/bazarr"
 	"github.com/pterm/pterm"
-
+	"github.com/regix1/bazarr-sync/internal/bazarr"
+	"github.com/regix1/bazarr-sync/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var radarrid []int
 var moviesContinueFrom int
 
-// moviesCmd represents the movies command
 var moviesCmd = &cobra.Command{
-	Use:   "movies",
-	Short: "Sync subtitles to the audio track of the movie",
+	Use:     "movies",
+	Short:   "Sync subtitles to the audio track of the movie",
 	Example: "bazarr-sync --config config.yaml sync movies --no-framerate-fix",
 	Long: `By default, Bazarr will try to sync the sub to the audio track:0 of the media. 
-This can fail due to many reasons mainly due to failure of bazarr to extract audio info. This is unfortunatly out of my hands.
+This can fail due to many reasons mainly due to failure of bazarr to extract audio info. This is unfortunately out of my hands.
 The script by default will try to not use the golden section search method and will try to fix framerate issues. This can be changed using the flags.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetConfig()
+
+		// Override config with command line flags
+		if cmd.Flags().Changed("golden-section") {
+			cfg.SyncOptions.GoldenSection = gss
+		}
+		if cmd.Flags().Changed("no-framerate-fix") {
+			cfg.SyncOptions.NoFramerateFix = no_framerate_fix
+		}
+		if cmd.Flags().Changed("use-cache") {
+			cfg.Cache.Enabled = use_cache
+		}
+
+		if cfg.Cache.Enabled {
+			Load_cache(cfg)
+		}
+
 		bazarr.HealthCheck(cfg)
+
 		if to_list {
 			list_movies(cfg)
 			return
 		}
-		runWithSignalHandler(func(c chan int){
+
+		runWithSignalHandler(func(c chan int) {
 			sync_movies(cfg, c)
 		})
 	},
@@ -42,24 +55,27 @@ The script by default will try to not use the golden section search method and w
 
 func init() {
 	syncCmd.AddCommand(moviesCmd)
-	
-	moviesCmd.Flags().IntSliceVar(&radarrid,"radarr-id",[]int{},"Specify a list of radarr Ids to sync. Use --list to view your movies with respective radarr id.")
-	moviesCmd.Flags().IntVar(&moviesContinueFrom,"continue-from",-1,"Continue with the given Radarr movie ID.")
+	moviesCmd.Flags().IntSliceVar(&radarrid, "radarr-id", []int{}, "Specify a list of radarr Ids to sync. Use --list to view your movies with respective radarr id.")
+	moviesCmd.Flags().IntVar(&moviesContinueFrom, "continue-from", -1, "Continue with the given Radarr movie ID.")
 }
 
 func sync_movies(cfg config.Config, c chan int) {
 	movies, err := bazarr.QueryMovies(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr,"Query Error: Could not query movies")
+		fmt.Fprintln(os.Stderr, "Query Error: Could not query movies")
+		return
 	}
+
 	fmt.Println("Syncing Movies in your Bazarr library.")
-	
+
 	skipForward := moviesContinueFrom != -1
-	movies:
+movies:
 	for i, movie := range movies.Data {
+		specified_id := false
 		if len(radarrid) > 0 {
 			for _, id := range radarrid {
 				if id == movie.RadarrId {
+					specified_id = true
 					goto subtitle
 				}
 			}
@@ -70,68 +86,86 @@ func sync_movies(cfg config.Config, c chan int) {
 			if movie.RadarrId == moviesContinueFrom {
 				skipForward = false
 			} else {
-				p,_ := pterm.DefaultSpinner.Start(pterm.LightBlue(movie.Title) + " lang:" + pterm.LightRed("N/A") + " " + strconv.Itoa(i+1) + "/" + strconv.Itoa(len(movies.Data)))
+				p, _ := pterm.DefaultSpinner.Start(pterm.LightBlue(movie.Title) + " lang:" + pterm.LightRed("N/A") + " " + strconv.Itoa(i+1) + "/" + strconv.Itoa(len(movies.Data)))
 				pterm.Success.Prefix = pterm.Prefix{Text: "SKIP", Style: pterm.NewStyle(pterm.BgLightBlue, pterm.FgBlack)}
-				p.Success(pterm.LightBlue(movie.Title," Skipping due to continue option."))
+				p.Success(pterm.LightBlue(movie.Title, " Skipping due to continue option."))
 				pterm.Success.Prefix = pterm.Prefix{Text: "SUCCESS", Style: pterm.NewStyle(pterm.BgGreen, pterm.FgBlack)}
 				continue
 			}
 		}
 
-		subtitle:
+	subtitle:
 		c <- movie.RadarrId
-		for _,subtitle := range movie.Subtitles {
-			p,_ := pterm.DefaultSpinner.Start(pterm.LightBlue(movie.Title) + " lang:" + pterm.LightRed(subtitle.Code2) + " " + strconv.Itoa(i+1) + "/" + strconv.Itoa(len(movies.Data)))
+		for _, subtitle := range movie.Subtitles {
+			p, _ := pterm.DefaultSpinner.Start(pterm.LightBlue(movie.Title) + " lang:" + pterm.LightRed(subtitle.Code2) + " " + strconv.Itoa(i+1) + "/" + strconv.Itoa(len(movies.Data)))
+
 			if subtitle.Path == "" || subtitle.File_size == 0 {
 				pterm.Success.Prefix = pterm.Prefix{Text: "SKIP", Style: pterm.NewStyle(pterm.BgLightBlue, pterm.FgBlack)}
-				p.Success(pterm.LightBlue(movie.Title," Could not find a subtitle. most likely it is embedded. Lang: ",subtitle.Code2))
+				p.Success(pterm.LightBlue(movie.Title, " Could not find a subtitle. Most likely it is embedded. Lang: ", subtitle.Code2))
 				pterm.Success.Prefix = pterm.Prefix{Text: "SUCCESS", Style: pterm.NewStyle(pterm.BgGreen, pterm.FgBlack)}
 				continue
 			}
+
+			if !specified_id && cfg.Cache.Enabled {
+				_, exists := movies_cache[subtitle.Path]
+				if exists {
+					pterm.Success.Prefix = pterm.Prefix{Text: "SKIP", Style: pterm.NewStyle(pterm.BgLightBlue, pterm.FgBlack)}
+					p.Success(pterm.LightBlue(movie.Title, " Subtitle already synced. Lang: ", subtitle.Code2))
+					pterm.Success.Prefix = pterm.Prefix{Text: "SUCCESS", Style: pterm.NewStyle(pterm.BgGreen, pterm.FgBlack)}
+					continue
+				}
+			}
+
 			params := bazarr.GetSyncParams("movie", movie.RadarrId, subtitle)
-			if gss {params.Gss = "True"}
-			if no_framerate_fix {params.No_framerate_fix = "True"}
-			ok := bazarr.Sync(cfg,params)	
+			if cfg.SyncOptions.GoldenSection {
+				params.Gss = "True"
+			}
+			if cfg.SyncOptions.NoFramerateFix {
+				params.No_framerate_fix = "True"
+			}
+
+			ok := bazarr.Sync(cfg, params)
 			if ok {
 				p.Success("Synced ", movie.Title, " lang:", subtitle.Code2)
+				Write_movies_cache(cfg, subtitle.Path)
 				continue
-
 			} else {
 				p.Warning("Error while syncing ", movie.Title, " lang: ", subtitle.Code2, " Retrying..")
-				for i := 1; i < 2; i++{	
-					p,_ := pterm.DefaultSpinner.Start(pterm.LightBlue(movie.Title) + " lang:" + pterm.LightRed(subtitle.Code2) + " " + strconv.Itoa(i+1) + "/" + strconv.Itoa(len(movie.Subtitles)))
-					time.Sleep(2*time.Second)
+				for i := 1; i < 2; i++ {
+					p, _ := pterm.DefaultSpinner.Start(pterm.LightBlue(movie.Title) + " lang:" + pterm.LightRed(subtitle.Code2) + " " + strconv.Itoa(i+1) + "/" + strconv.Itoa(len(movie.Subtitles)))
+					time.Sleep(2 * time.Second)
 					ok := bazarr.Sync(cfg, params)
-					if ok{
+					if ok {
 						p.Success("Synced: ", movie.Title, " lang:", subtitle.Code2)
+						Write_movies_cache(cfg, subtitle.Path)
 						break
-					}	
+					}
 				}
-				if !ok {	
+				if !ok {
 					p.Fail("Unable to sync ", movie.Title, " lang: ", subtitle.Code2)
 				}
 			}
-			
 		}
-	} 
+	}
+
 	fmt.Println("Finished syncing subtitles of type Movies")
-	// Signal that we're done with all subtitles.
 	close(c)
 }
 
-func list_movies(cfg config.Config) {	
+func list_movies(cfg config.Config) {
 	movies, err := bazarr.QueryMovies(cfg)
 	if err != nil {
-		fmt.Fprintln(os.Stderr,"Query Error: Could not query movies")
+		fmt.Fprintln(os.Stderr, "Query Error: Could not query movies")
+		return
 	}
+
 	table := pterm.TableData{
-		{"Title","RadarrId"},
+		{"Title", "RadarrId"},
 	}
-	pterm.Println(pterm.LightGreen("Listing all your movies with their respective imdbId (great for syncing specefic movie)\n"))
+	pterm.Println(pterm.LightGreen("Listing all your movies with their respective RadarrId\n"))
 
 	for _, movie := range movies.Data {
-		// pterm.Println(pterm.LightBlue(movie.Title), "\t", pterm.LightRed(movie.ImdbId))
-		t := []string{pterm.LightBlue(movie.Title),pterm.LightRed(movie.RadarrId)}
+		t := []string{pterm.LightBlue(movie.Title), pterm.LightRed(strconv.Itoa(movie.RadarrId))}
 		table = append(table, t)
 	}
 	pterm.DefaultTable.WithHasHeader().WithHeaderRowSeparator("-").WithData(table).Render()

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/ajmandourah/bazarr-sync/internal/cli"
+	"github.com/regix1/bazarr-sync/internal/cli"
 )
 
-func main() {	
+func main() {
 	cli.Execute()
 }

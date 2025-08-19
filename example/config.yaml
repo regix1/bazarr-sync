@@ -1,16 +1,41 @@
-#config file example, please don't use quotes
-###########################
-#
-#Address: the address of your bazarr instance. this can be either an ip address or a url (if you reverse proxy bazarr), 
-#this can also be bazarr's container name if you use docker, make sure bazarr-sync instance is in the same network as bazarr and the network not the default
-#docker network as name resolution won't happen there.
+# Bazarr connection settings
 Address: <bazarr_address>
-#
-#Port: bazarrs port. by default bazarr uses 6767. in case of reverse proxy, you can use 443 or 80 as per your configuration 
 Port: <port>
-#
-#protocol: this can be http or https
-Protocol: https
-#
-#ApiToken: you can get this from bazarr setting>general . no quotes needed.
+Protocol: http
 ApiToken: <Bazarr_api_token>
+
+# Scheduling settings (optional)
+# If not set, the tool will run once and exit
+Schedule:
+  # Enable scheduled runs
+  Enabled: true
+  
+  # Sync settings
+  SyncMovies: true
+  SyncShows: true
+  
+  # Schedule using cron expression
+  # Examples:
+  # "0 1 * * 0" - Every Sunday at 1:00 AM
+  # "0 2 * * *" - Every day at 2:00 AM
+  # "0 3 * * 1,3,5" - Every Monday, Wednesday, Friday at 3:00 AM
+  # "0 */6 * * *" - Every 6 hours
+  CronExpression: "0 1 * * 0"
+  
+  # Timezone for the schedule (e.g., "America/Chicago", "UTC", "Europe/London")
+  Timezone: "America/Chicago"
+
+# Cache settings (optional)
+Cache:
+  # Enable cache to skip already synced subtitles
+  Enabled: true
+  # Cache file locations (relative to working directory)
+  MoviesCache: "movies-cache"
+  ShowsCache: "shows-cache"
+
+# Sync options (optional)
+SyncOptions:
+  # Use Golden Section Search algorithm
+  GoldenSection: false
+  # Don't try to fix framerate issues
+  NoFramerateFix: true
