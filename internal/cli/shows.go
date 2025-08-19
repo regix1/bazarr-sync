@@ -3,10 +3,9 @@ package cli
 import (
 	"fmt"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 
-	"github.com/pterm/pterm"
 	"github.com/regix1/bazarr-sync/internal/bazarr"
 	"github.com/regix1/bazarr-sync/internal/config"
 	"github.com/spf13/cobra"
@@ -66,9 +65,16 @@ func sync_shows(cfg config.Config, c chan int) {
 		return
 	}
 
-	fmt.Println("Syncing shows in your Bazarr library.")
+	totalShows := len(shows.Data)
+	fmt.Printf("Found %d shows in your Bazarr library.\n", totalShows)
+	fmt.Println("Starting sync process...")
+	fmt.Println(strings.Repeat("-", 60))
 
 	skipForward := showsContinueFrom != -1
+	successCount := 0
+	skipCount := 0
+	failCount := 0
+
 shows:
 	for i, show := range shows.Data {
 		specified_id := false
@@ -85,22 +91,24 @@ shows:
 	episodes:
 		episodes, err := bazarr.QueryEpisodes(cfg, show.SonarrSeriesId)
 		if err != nil {
+			fmt.Printf("[%d/%d] ERROR: %s - Could not query episodes\n", i+1, totalShows, show.Title)
 			continue
 		}
 
+		if len(episodes.Data) == 0 {
+			fmt.Printf("[%d/%d] NO EPISODES: %s\n", i+1, totalShows, show.Title)
+			continue
+		}
+
+		fmt.Printf("[%d/%d] PROCESSING: %s (%d episodes)\n", i+1, totalShows, show.Title, len(episodes.Data))
+
 		for _, episode := range episodes.Data {
 			for _, subtitle := range episode.Subtitles {
-				p, _ := pterm.DefaultSpinner.Start(pterm.LightBlue(show.Title),
-					pterm.LightGreen(":", episode.Title),
-					" lang:"+pterm.LightRed(subtitle.Code2)+" "+strconv.Itoa(i+1)+"/"+strconv.Itoa(len(shows.Data)))
-
 				if skipForward {
 					if episode.SonarrEpisodeId == showsContinueFrom {
 						skipForward = false
 					} else {
-						pterm.Success.Prefix = pterm.Prefix{Text: "SKIP", Style: pterm.NewStyle(pterm.BgLightBlue, pterm.FgBlack)}
-						p.Success(pterm.LightBlue(show.Title, ":", episode.Title, " Skipping due to continue option."))
-						pterm.Success.Prefix = pterm.Prefix{Text: "SUCCESS", Style: pterm.NewStyle(pterm.BgGreen, pterm.FgBlack)}
+						skipCount++
 						continue
 					}
 				}
@@ -108,18 +116,16 @@ shows:
 				c <- episode.SonarrEpisodeId
 
 				if subtitle.Path == "" || subtitle.File_size == 0 {
-					pterm.Success.Prefix = pterm.Prefix{Text: "SKIP", Style: pterm.NewStyle(pterm.BgLightBlue, pterm.FgBlack)}
-					p.Success(pterm.LightBlue(show.Title, ":", episode.Title, " Could not find a subtitle. Most likely it is embedded. Lang: ", subtitle.Code2))
-					pterm.Success.Prefix = pterm.Prefix{Text: "SUCCESS", Style: pterm.NewStyle(pterm.BgGreen, pterm.FgBlack)}
+					fmt.Printf("  └─ SKIP [%s - %s]: Embedded or missing\n", episode.Title, subtitle.Code2)
+					skipCount++
 					continue
 				}
 
 				if !specified_id && cfg.Cache.Enabled {
 					_, exists := shows_cache[subtitle.Path]
 					if exists {
-						pterm.Success.Prefix = pterm.Prefix{Text: "SKIP", Style: pterm.NewStyle(pterm.BgLightBlue, pterm.FgBlack)}
-						p.Success(pterm.LightBlue(show.Title, ":", episode.Title, " Subtitle already synced. Lang: ", subtitle.Code2))
-						pterm.Success.Prefix = pterm.Prefix{Text: "SUCCESS", Style: pterm.NewStyle(pterm.BgGreen, pterm.FgBlack)}
+						fmt.Printf("  └─ CACHED [%s - %s]: Already synced\n", episode.Title, subtitle.Code2)
+						skipCount++
 						continue
 					}
 				}
@@ -132,33 +138,33 @@ shows:
 					params.No_framerate_fix = "True"
 				}
 
+				fmt.Printf("  └─ SYNCING [%s - %s]: ", episode.Title, subtitle.Code2)
 				ok := bazarr.Sync(cfg, params)
+
 				if ok {
-					p.Success("Synced ", show.Title, ":", episode.Title, " lang: ", subtitle.Code2)
+					fmt.Printf("✓ Success\n")
 					Write_shows_cache(cfg, subtitle.Path)
-					continue
+					successCount++
 				} else {
-					for i := 1; i < 2; i++ {
-						p, _ := pterm.DefaultSpinner.Start(pterm.LightBlue(show.Title),
-							pterm.LightGreen(":", episode.Title),
-							" lang:"+pterm.LightRed(subtitle.Code2)+" "+strconv.Itoa(i+1)+"/"+strconv.Itoa(len(shows.Data)))
-						time.Sleep(2 * time.Second)
-						ok := bazarr.Sync(cfg, params)
-						if ok {
-							p.Success("Synced ", show.Title, ":", episode.Title, " lang: ", subtitle.Code2)
-							Write_shows_cache(cfg, subtitle.Path)
-							break
-						}
-					}
-					if !ok {
-						p.Fail("Unable to sync ", show.Title, ":", episode.Title, " lang: ", subtitle.Code2)
+					fmt.Printf("✗ Failed, retrying...")
+					time.Sleep(2 * time.Second)
+					ok := bazarr.Sync(cfg, params)
+					if ok {
+						fmt.Printf(" ✓ Success\n")
+						Write_shows_cache(cfg, subtitle.Path)
+						successCount++
+					} else {
+						fmt.Printf(" ✗ Failed\n")
+						failCount++
 					}
 				}
 			}
 		}
 	}
 
-	fmt.Println("Finished syncing subtitles of type Shows")
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Printf("Sync completed: %d successful, %d skipped, %d failed\n",
+		successCount, skipCount, failCount)
 	close(c)
 }
 
@@ -169,14 +175,12 @@ func list_shows(cfg config.Config) {
 		return
 	}
 
-	table := pterm.TableData{
-		{"Title", "SonarrSeriesId"},
-	}
-	pterm.Println(pterm.LightGreen("Listing all your Series with their respective SonarrSeriesId\n"))
+	fmt.Printf("%-60s %s\n", "Title", "SonarrSeriesId")
+	fmt.Println(strings.Repeat("-", 70))
 
 	for _, show := range shows.Data {
-		t := []string{pterm.LightBlue(show.Title), pterm.LightRed(strconv.Itoa(show.SonarrSeriesId))}
-		table = append(table, t)
+		fmt.Printf("%-60s %d\n", show.Title, show.SonarrSeriesId)
 	}
-	pterm.DefaultTable.WithHasHeader().WithHeaderRowSeparator("-").WithData(table).Render()
+
+	fmt.Printf("\nTotal: %d shows\n", len(shows.Data))
 }
