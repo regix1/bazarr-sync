@@ -83,6 +83,9 @@ func sync_shows(cfg config.Config, c chan int) {
 	failCount := 0
 	alreadySyncedCount := 0
 
+	// Spinner characters
+	spinners := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 shows:
 	for i, show := range shows.Data {
 		if len(sonarrid) > 0 {
@@ -147,41 +150,110 @@ shows:
 					params.No_framerate_fix = "True"
 				}
 
+				// Start sync with spinner
 				fmt.Printf("  └─ SYNCING [%s - %s]: ", episode.Title, subtitle.Code2)
-				ok, message := bazarr.Sync(cfg, params)
 
-				if ok {
-					fmt.Printf("✓ Success\n")
+				// Start sync in background
+				syncDone := make(chan struct {
+					success bool
+					message string
+				})
+
+				go func() {
+					ok, msg := bazarr.Sync(cfg, params)
+					syncDone <- struct {
+						success bool
+						message string
+					}{ok, msg}
+				}()
+
+				// Show spinner while waiting
+				spinnerIndex := 0
+				ticker := time.NewTicker(100 * time.Millisecond)
+				defer ticker.Stop()
+
+				var result struct {
+					success bool
+					message string
+				}
+
+			spinnerLoop:
+				for {
+					select {
+					case result = <-syncDone:
+						break spinnerLoop
+					case <-ticker.C:
+						fmt.Printf("\r  └─ SYNCING [%s - %s]: %s ", episode.Title, subtitle.Code2, spinners[spinnerIndex])
+						spinnerIndex = (spinnerIndex + 1) % len(spinners)
+					}
+				}
+
+				// Clear spinner and show result
+				fmt.Printf("\r  └─ SYNCING [%s - %s]: ", episode.Title, subtitle.Code2)
+
+				if result.success {
+					fmt.Printf("✓ Success                    \n")
 					Write_shows_cache(cfg, subtitle.Path)
 					successCount++
 				} else {
 					// Check if it's already synced
-					if strings.Contains(strings.ToLower(message), "already") ||
-						strings.Contains(strings.ToLower(message), "sync") ||
-						strings.Contains(message, "304") ||
-						strings.Contains(message, "409") {
-						fmt.Printf("✓ Already in sync\n")
+					if strings.Contains(strings.ToLower(result.message), "already") ||
+						strings.Contains(strings.ToLower(result.message), "sync") ||
+						strings.Contains(result.message, "304") ||
+						strings.Contains(result.message, "409") {
+						fmt.Printf("✓ Already in sync            \n")
 						Write_shows_cache(cfg, subtitle.Path) // Cache it so we don't try again
 						alreadySyncedCount++
 					} else {
 						// Retry once for real failures
-						fmt.Printf("✗ Failed (%s), retrying...", message)
-						time.Sleep(2 * time.Second)
-						ok, message := bazarr.Sync(cfg, params)
-						if ok {
-							fmt.Printf(" ✓ Success\n")
+						if verbose {
+							fmt.Printf("✗ Failed (%s), retrying...\n  └─ RETRYING [%s - %s]: ", result.message, episode.Title, subtitle.Code2)
+						} else {
+							fmt.Printf("✗ Failed, retrying...        \n  └─ RETRYING [%s - %s]: ", episode.Title, subtitle.Code2)
+						}
+
+						// Retry with spinner
+						go func() {
+							time.Sleep(2 * time.Second)
+							ok, msg := bazarr.Sync(cfg, params)
+							syncDone <- struct {
+								success bool
+								message string
+							}{ok, msg}
+						}()
+
+						// Show spinner for retry
+						spinnerIndex = 0
+						ticker = time.NewTicker(100 * time.Millisecond)
+					retrySpinner:
+						for {
+							select {
+							case result = <-syncDone:
+								ticker.Stop()
+								break retrySpinner
+							case <-ticker.C:
+								fmt.Printf("\r  └─ RETRYING [%s - %s]: %s ", episode.Title, subtitle.Code2, spinners[spinnerIndex])
+								spinnerIndex = (spinnerIndex + 1) % len(spinners)
+							}
+						}
+
+						// Clear spinner and show retry result
+						fmt.Printf("\r  └─ RETRYING [%s - %s]: ", episode.Title, subtitle.Code2)
+
+						if result.success {
+							fmt.Printf("✓ Success                    \n")
 							Write_shows_cache(cfg, subtitle.Path)
 							successCount++
-						} else if strings.Contains(strings.ToLower(message), "already") ||
-							strings.Contains(strings.ToLower(message), "sync") {
-							fmt.Printf(" ✓ Already in sync\n")
+						} else if strings.Contains(strings.ToLower(result.message), "already") ||
+							strings.Contains(strings.ToLower(result.message), "sync") {
+							fmt.Printf("✓ Already in sync            \n")
 							Write_shows_cache(cfg, subtitle.Path)
 							alreadySyncedCount++
 						} else {
 							if verbose {
-								fmt.Printf(" ✗ Failed: %s\n", message)
+								fmt.Printf("✗ Failed: %s\n", result.message)
 							} else {
-								fmt.Printf(" ✗ Failed\n")
+								fmt.Printf("✗ Failed                     \n")
 							}
 							failCount++
 						}
