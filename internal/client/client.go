@@ -23,16 +23,20 @@ func GetClient(token string) *HttpClient {
 			},
 		}
 	}
+	// Update token in case it changed
+	client.Token = token
 	return client
 }
 
 // Rewrite of the Do method adding the api auth as a header
 func (c *HttpClient) Do(req *http.Request) (resp *http.Response, err error) {
-	req.Header.Add("X-API-KEY", c.Token)
+	// Always add the API key
+	req.Header.Set("X-API-KEY", c.Token)
+
 	if req.Method == "PATCH" {
 		// Sync operations can take longer - no timeout
 		tempClient := http.Client{Timeout: 0}
-		req.Header.Add("X-API-KEY", c.Token)
+		// Make sure headers are preserved
 		return tempClient.Do(req)
 	}
 	return c.client.Do(req)
