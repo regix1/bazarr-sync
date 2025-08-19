@@ -1,8 +1,4 @@
-# bazarr-sync
-
 <div align="center">
-
-![bazarr-sync](https://github.com/regix1/bazarr-sync/assets/27051374/6c4acde4-bb9b-4172-8c67-c985c7994b28)
 
 ### 🎯 Bulk sync subtitles in Bazarr with ease
 
