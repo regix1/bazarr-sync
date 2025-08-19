@@ -31,8 +31,8 @@ Bazarr lets you download subs for your titles automatically.
 But if for some reason you needed to sync old subtitles, you will be forced 
 to do it one by one as there is no option to bulk sync them.
 This cli tool helps you achieve that by utilizing bazarr's api.`,
-	Example: `  bazarr-sync movies
-  bazarr-sync shows
+	Example: `  bazarr-sync sync movies
+  bazarr-sync sync shows
   bazarr-sync cancel
   bazarr-sync --schedule`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -92,7 +92,6 @@ func Load_cache(cfg config.Config) {
 
 	movies_cache_file, err := os.Open(cfg.Cache.MoviesCache)
 	if err != nil {
-		// File doesn't exist yet, that's okay
 		if !os.IsNotExist(err) {
 			fmt.Fprintln(os.Stderr, "Error opening movies cache file:", err)
 		}

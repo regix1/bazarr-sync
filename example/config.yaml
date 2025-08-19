@@ -29,8 +29,8 @@ Cache:
   # Enable cache to skip already synced subtitles
   Enabled: true
   # Cache file locations (relative to working directory)
-  MoviesCache: "movies-cache"
-  ShowsCache: "shows-cache"
+  MoviesCache: "/config/movies-cache"
+  ShowsCache: "/config/shows-cache"
 
 # Sync options (optional)
 SyncOptions:

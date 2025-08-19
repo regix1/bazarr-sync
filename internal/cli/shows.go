@@ -18,9 +18,12 @@ var showsCmd = &cobra.Command{
 	Use:     "shows",
 	Aliases: []string{"show", "tv", "series"},
 	Short:   "Sync subtitles to the audio track of TV shows",
-	Example: `  bazarr-sync shows
-  bazarr-sync shows --list
-  bazarr-sync shows --sonarr-id 123,456`,
+	Example: `  bazarr-sync sync shows
+  bazarr-sync sync shows --list
+  bazarr-sync sync shows --sonarr-id 123,456`,
+	Long: `By default, Bazarr will try to sync the sub to the audio track:0 of the media. 
+This can fail due to many reasons mainly due to failure of bazarr to extract audio info. This is unfortunately out of my hands.
+The script by default will try to not use the golden section search method and will try to fix framerate issues. This can be changed using the flags.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetConfig()
 
@@ -54,8 +57,8 @@ var showsCmd = &cobra.Command{
 
 func init() {
 	syncCmd.AddCommand(showsCmd)
-	showsCmd.Flags().IntSliceVar(&sonarrid, "sonarr-id", []int{}, "Sync specific shows by Sonarr ID")
-	showsCmd.Flags().IntVar(&showsContinueFrom, "continue-from", -1, "Continue from a specific Sonarr episode ID")
+	showsCmd.Flags().IntSliceVar(&sonarrid, "sonarr-id", []int{}, "Specify a list of sonarr Ids to sync. Use --list to view your shows with respective sonarr id.")
+	showsCmd.Flags().IntVar(&showsContinueFrom, "continue-from", -1, "Continue with the given Sonarr episode ID.")
 }
 
 func sync_shows(cfg config.Config, c chan int) {
@@ -77,18 +80,19 @@ func sync_shows(cfg config.Config, c chan int) {
 
 shows:
 	for i, show := range shows.Data {
-		specified_id := false
 		if len(sonarrid) > 0 {
+			found := false
 			for _, id := range sonarrid {
 				if id == show.SonarrSeriesId {
-					specified_id = true
-					goto episodes
+					found = true
+					break
 				}
 			}
-			continue shows
+			if !found {
+				continue shows
+			}
 		}
 
-	episodes:
 		episodes, err := bazarr.QueryEpisodes(cfg, show.SonarrSeriesId)
 		if err != nil {
 			fmt.Printf("[%d/%d] ERROR: %s - Could not query episodes\n", i+1, totalShows, show.Title)
@@ -121,7 +125,7 @@ shows:
 					continue
 				}
 
-				if !specified_id && cfg.Cache.Enabled {
+				if cfg.Cache.Enabled {
 					_, exists := shows_cache[subtitle.Path]
 					if exists {
 						fmt.Printf("  └─ CACHED [%s - %s]: Already synced\n", episode.Title, subtitle.Code2)
@@ -158,6 +162,9 @@ shows:
 						failCount++
 					}
 				}
+
+				// Add delay between syncs to avoid overwhelming Bazarr
+				time.Sleep(1 * time.Second)
 			}
 		}
 	}

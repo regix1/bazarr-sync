@@ -17,7 +17,7 @@ RUN go build -v -o /usr/local/bin/bazarr-sync ./cmd/bazarr-sync/
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata python3
 
 # Copy binary from builder
 COPY --from=builder /usr/local/bin/bazarr-sync /usr/local/bin/bazarr-sync

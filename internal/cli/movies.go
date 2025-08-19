@@ -18,9 +18,12 @@ var moviesCmd = &cobra.Command{
 	Use:     "movies",
 	Aliases: []string{"movie", "m"},
 	Short:   "Sync subtitles to the audio track of movies",
-	Example: `  bazarr-sync movies
-  bazarr-sync movies --list
-  bazarr-sync movies --radarr-id 123,456`,
+	Example: `  bazarr-sync sync movies
+  bazarr-sync sync movies --list
+  bazarr-sync sync movies --radarr-id 123,456`,
+	Long: `By default, Bazarr will try to sync the sub to the audio track:0 of the media. 
+This can fail due to many reasons mainly due to failure of bazarr to extract audio info. This is unfortunately out of my hands.
+The script by default will try to not use the golden section search method and will try to fix framerate issues. This can be changed using the flags.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.GetConfig()
 
@@ -54,8 +57,8 @@ var moviesCmd = &cobra.Command{
 
 func init() {
 	syncCmd.AddCommand(moviesCmd)
-	moviesCmd.Flags().IntSliceVar(&radarrid, "radarr-id", []int{}, "Sync specific movies by Radarr ID")
-	moviesCmd.Flags().IntVar(&moviesContinueFrom, "continue-from", -1, "Continue from a specific Radarr movie ID")
+	moviesCmd.Flags().IntSliceVar(&radarrid, "radarr-id", []int{}, "Specify a list of radarr Ids to sync. Use --list to view your movies with respective radarr id.")
+	moviesCmd.Flags().IntVar(&moviesContinueFrom, "continue-from", -1, "Continue with the given Radarr movie ID.")
 }
 
 func sync_movies(cfg config.Config, c chan int) {
@@ -77,15 +80,17 @@ func sync_movies(cfg config.Config, c chan int) {
 
 movies:
 	for i, movie := range movies.Data {
-		specified_id := false
 		if len(radarrid) > 0 {
+			found := false
 			for _, id := range radarrid {
 				if id == movie.RadarrId {
-					specified_id = true
-					goto subtitle
+					found = true
+					break
 				}
 			}
-			continue movies
+			if !found {
+				continue movies
+			}
 		}
 
 		if skipForward {
@@ -98,7 +103,6 @@ movies:
 			}
 		}
 
-	subtitle:
 		c <- movie.RadarrId
 
 		if len(movie.Subtitles) == 0 {
@@ -115,7 +119,7 @@ movies:
 				continue
 			}
 
-			if !specified_id && cfg.Cache.Enabled {
+			if cfg.Cache.Enabled {
 				_, exists := movies_cache[subtitle.Path]
 				if exists {
 					fmt.Printf("  └─ CACHED [%s]: Already synced\n", subtitle.Code2)
@@ -152,6 +156,9 @@ movies:
 					failCount++
 				}
 			}
+
+			// Add delay between syncs to avoid overwhelming Bazarr
+			time.Sleep(1 * time.Second)
 		}
 	}
 

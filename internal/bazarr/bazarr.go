@@ -14,8 +14,6 @@ import (
 	"github.com/regix1/bazarr-sync/internal/config"
 )
 
-var cfg config.Config
-
 func QueryMovies(cfg config.Config) (movies_info, error) {
 	c := client.GetClient(cfg.ApiToken)
 	url, _ := url.JoinPath(cfg.ApiUrl, "movies")
@@ -131,8 +129,6 @@ func Sync(cfg config.Config, params Sync_params) bool {
 	queryUrl.Set("action", "sync")
 	queryUrl.Set("language", params.Lang)
 	queryUrl.Set("type", params.Type)
-	queryUrl.Set("gss", params.Gss)
-	queryUrl.Set("no_fix_framerate", params.No_framerate_fix)
 	_url.RawQuery = queryUrl.Encode()
 
 	resp, err := c.Patch(_url.String())

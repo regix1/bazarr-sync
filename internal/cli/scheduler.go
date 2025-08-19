@@ -92,6 +92,11 @@ func runSyncJobs(cfg config.Config) {
 		}
 	}()
 
+	// Load cache if enabled
+	if cfg.Cache.Enabled {
+		Load_cache(cfg)
+	}
+
 	// Run sync jobs based on configuration
 	if cfg.Schedule.SyncShows {
 		fmt.Println("\n📺 Syncing TV shows...")

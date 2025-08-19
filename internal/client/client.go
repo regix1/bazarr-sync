@@ -30,7 +30,7 @@ func GetClient(token string) *HttpClient {
 func (c *HttpClient) Do(req *http.Request) (resp *http.Response, err error) {
 	req.Header.Add("X-API-KEY", c.Token)
 	if req.Method == "PATCH" {
-		// Sync operations can take longer
+		// Sync operations can take longer - no timeout
 		tempClient := http.Client{Timeout: 0}
 		req.Header.Add("X-API-KEY", c.Token)
 		return tempClient.Do(req)
